@@ -27,7 +27,7 @@
   * [Heat Map](#heat-map)
   * [Box Plot](#box-plot)
 
-#### Version 2.0.0-beta.5
+#### Version 2.0.0-beta.6
 The entire dc.js library is scoped under the **dc** name space. It does not introduce anything else
 into the global name space.
 #### Function Chaining
@@ -1106,7 +1106,8 @@ functions, splines, and cubic interpolation.  This is passed to
 [d3.svg.area.interpolate](https://github.com/mbostock/d3/wiki/SVG-Shapes#area_interpolate),
 where you can find a complete list of valid arguments
 
-#### .tension([value]) Gets or sets the tension to use for lines drawn, in the range 0 to 1.
+#### .tension([value])
+Gets or sets the tension to use for lines drawn, in the range 0 to 1.
 This parameter further customizes the interpolation behavior.  It is passed to
 [d3.svg.line.tension](https://github.com/mbostock/d3/wiki/SVG-Shapes#line_tension) and
 [d3.svg.area.tension](https://github.com/mbostock/d3/wiki/SVG-Shapes#area_tension).  Default:
