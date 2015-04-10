@@ -3259,9 +3259,9 @@ dc.stackMixin = function (_chart) {
     };
 
     function flattenStack() {
-        return _chart.data().reduce(function (all, layer) {
-            return all.concat(layer.values);
-        }, []);
+        var valueses = _chart.data().map(function (layer) { return layer.values; });
+        var flattened = Array.prototype.concat.apply([], valueses);
+        return _chart._computeOrderedGroups(flattened);
     }
 
     _chart.xAxisMin = function () {
@@ -3845,7 +3845,7 @@ dc.pieChart = function (parent, chartGroup) {
     function createTitles(slicesEnter) {
         if (_chart.renderTitle()) {
             slicesEnter.append('title').text(function (d) {
-                return _chart.title()(d);
+                return _chart.title()(d.data);
             });
         }
     }
@@ -4519,6 +4519,7 @@ dc.lineChart = function (parent, chartGroup) {
     var _tension = 0.7;
     var _defined;
     var _dashStyle;
+    var _xyTipsOn = true;
 
     _chart.transitionDuration(500);
     _chart._rangeBandPadding(1);
@@ -4564,7 +4565,8 @@ dc.lineChart = function (parent, chartGroup) {
     };
 
     /**
-     #### .tension([value]) Gets or sets the tension to use for lines drawn, in the range 0 to 1.
+     #### .tension([value])
+     Gets or sets the tension to use for lines drawn, in the range 0 to 1.
      This parameter further customizes the interpolation behavior.  It is passed to
      [d3.svg.line.tension](https://github.com/mbostock/d3/wiki/SVG-Shapes#line_tension) and
      [d3.svg.area.tension](https://github.com/mbostock/d3/wiki/SVG-Shapes#area_tension).  Default:
@@ -4700,7 +4702,7 @@ dc.lineChart = function (parent, chartGroup) {
     }
 
     function drawDots(chartBody, layers) {
-        if (!_chart.brushOn()) {
+        if (!_chart.brushOn() && _chart.xyTipsOn()) {
             var tooltipListClass = TOOLTIP_G_CLASS + '-list';
             var tooltips = chartBody.select('g.' + tooltipListClass);
 
@@ -4804,6 +4806,20 @@ dc.lineChart = function (parent, chartGroup) {
             dot.append('title').text(dc.pluck('data', _chart.title(d.name)));
         }
     }
+
+    /**
+     #### .xyTipsOn([boolean])
+     Turn on/off the mouseover behavior of an individual data point which renders a circle and x/y axis
+     dashed lines back to each respective axis.  This is ignored if the chart brush is on (`brushOn`)
+     Default: true
+     */
+    _chart.xyTipsOn = function (_) {
+        if (!arguments.length) {
+            return _xyTipsOn;
+        }
+        _xyTipsOn = _;
+        return _chart;
+    };
 
     /**
     #### .dotRadius([dotRadius])
@@ -7831,6 +7847,11 @@ dc.heatMap = function (parent, chartGroup) {
 
     var _cols;
     var _rows;
+    var _colOrdering = d3.ascending;
+    var _rowOrdering = d3.ascending;
+    var _colScale = d3.scale.ordinal();
+    var _rowScale = d3.scale.ordinal();
+
     var _xBorderRadius = DEFAULT_BORDER_RADIUS;
     var _yBorderRadius = DEFAULT_BORDER_RADIUS;
 
@@ -7918,47 +7939,55 @@ dc.heatMap = function (parent, chartGroup) {
         return _chart._filter(dc.filters.TwoDimensionalFilter(filter));
     });
 
-    function uniq(d, i, a) {
-        return !i || a[i - 1] !== d;
-    }
-
     /**
      #### .rows([values])
      Gets or sets the values used to create the rows of the heatmap, as an array. By default, all
-     the values will be fetched from the data using the value accessor, and they will be sorted in
-     ascending order.
+     the values will be fetched from the data using the value accessor.
      **/
 
     _chart.rows = function (_) {
-        if (arguments.length) {
-            _rows = _;
-            return _chart;
-        }
-        if (_rows) {
+        if (!arguments.length) {
             return _rows;
         }
-        var rowValues = _chart.data().map(_chart.valueAccessor());
-        rowValues.sort(d3.ascending);
-        return d3.scale.ordinal().domain(rowValues.filter(uniq));
+        _rows = _;
+        return _chart;
+    };
+
+    /**
+     #### .rowOrdering([orderFunction])
+     Get or set an accessor to order the rows.  Default is d3.ascending.
+     */
+    _chart.rowOrdering = function (_) {
+        if (!arguments.length) {
+            return _rowOrdering;
+        }
+        _rowOrdering = _;
+        return _chart;
     };
 
     /**
      #### .cols([keys])
      Gets or sets the keys used to create the columns of the heatmap, as an array. By default, all
-     the values will be fetched from the data using the key accessor, and they will be sorted in
-     ascending order.
+     the values will be fetched from the data using the key accessor.
      **/
     _chart.cols = function (_) {
-        if (arguments.length) {
-            _cols = _;
-            return _chart;
-        }
-        if (_cols) {
+        if (!arguments.length) {
             return _cols;
         }
-        var colValues = _chart.data().map(_chart.keyAccessor());
-        colValues.sort(d3.ascending);
-        return d3.scale.ordinal().domain(colValues.filter(uniq));
+        _cols = _;
+        return _chart;
+    };
+
+    /**
+     #### .colOrdering([orderFunction])
+     Get or set an accessor to order the cols.  Default is ascending.
+     */
+    _chart.colOrdering = function (_) {
+        if (!arguments.length) {
+            return _colOrdering;
+        }
+        _colOrdering = _;
+        return _chart;
     };
 
     _chart._doRender = function () {
@@ -7973,9 +8002,19 @@ dc.heatMap = function (parent, chartGroup) {
     };
 
     _chart._doRedraw = function () {
-        var rows = _chart.rows(),
-            cols = _chart.cols(),
-            rowCount = rows.domain().length,
+        var data = _chart.data(),
+            rows = _chart.rows() || data.map(_chart.valueAccessor()),
+            cols = _chart.cols() || data.map(_chart.keyAccessor());
+        if (_rowOrdering) {
+            rows = rows.sort(_rowOrdering);
+        }
+        if (_colOrdering) {
+            cols = cols.sort(_colOrdering);
+        }
+        rows = _rowScale.domain(rows);
+        cols = _colScale.domain(cols);
+
+        var rowCount = rows.domain().length,
             colCount = cols.domain().length,
             boxWidth = Math.floor(_chart.effectiveWidth() / colCount),
             boxHeight = Math.floor(_chart.effectiveHeight() / rowCount);
@@ -7995,8 +8034,8 @@ dc.heatMap = function (parent, chartGroup) {
             .on('click', _chart.boxOnClick());
 
         if (_chart.renderTitle()) {
-            gEnter.append('title')
-                .text(_chart.title());
+            gEnter.append('title');
+            boxes.selectAll('title').text(_chart.title());
         }
 
         dc.transition(boxes.selectAll('rect'), _chart.transitionDuration())
